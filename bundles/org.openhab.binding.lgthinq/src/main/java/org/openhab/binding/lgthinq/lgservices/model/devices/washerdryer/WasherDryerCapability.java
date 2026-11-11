@@ -39,6 +39,7 @@ public class WasherDryerCapability extends AbstractCapability<WasherDryerCapabil
     private String commandWakeUp = "";
     private String commandStop = "";
     private String defaultCourseId = "";
+    private String notSelectedCourseKey = "";
     private FeatureDefinition state = FeatureDefinition.NULL_DEFINITION;
     private FeatureDefinition soilWash = FeatureDefinition.NULL_DEFINITION;
     private FeatureDefinition spin = FeatureDefinition.NULL_DEFINITION;
@@ -46,6 +47,7 @@ public class WasherDryerCapability extends AbstractCapability<WasherDryerCapabil
     private FeatureDefinition rinse = FeatureDefinition.NULL_DEFINITION;
     private FeatureDefinition error = FeatureDefinition.NULL_DEFINITION;
     private FeatureDefinition dryLevel = FeatureDefinition.NULL_DEFINITION;
+    private FeatureDefinition previousState = FeatureDefinition.NULL_DEFINITION;
     private FeatureDefinition processState = FeatureDefinition.NULL_DEFINITION;
     private boolean hasDoorLook;
     private Map<String, CommandDefinition> commandsDefinition = new HashMap<>();
@@ -57,6 +59,14 @@ public class WasherDryerCapability extends AbstractCapability<WasherDryerCapabil
 
     public void setDefaultCourseId(String defaultCourseId) {
         this.defaultCourseId = defaultCourseId;
+    }
+
+    public String getNotSelectedCourseKey() {
+        return notSelectedCourseKey;
+    }
+
+    public void setNotSelectedCourseKey(String notSelectedCourseKey) {
+        this.notSelectedCourseKey = notSelectedCourseKey;
     }
 
     public Map<String, CommandDefinition> getCommandsDefinition() {
@@ -105,6 +115,14 @@ public class WasherDryerCapability extends AbstractCapability<WasherDryerCapabil
 
     public void setProcessState(FeatureDefinition processState) {
         this.processState = processState;
+    }
+
+    public FeatureDefinition getPreviousState() {
+        return previousState;
+    }
+
+    public void setPreviousState(FeatureDefinition previousState) {
+        this.previousState = previousState;
     }
 
     public Map<String, CourseDefinition> getCourses() {

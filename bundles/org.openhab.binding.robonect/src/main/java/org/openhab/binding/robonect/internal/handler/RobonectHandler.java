@@ -80,7 +80,7 @@ import com.google.gson.JsonSyntaxException;
  * The channels are periodically updated by polling the mower via HTTP in a separate thread.
  *
  * @author Marco Meyer - Initial contribution
- * @author Nico BrÃ¼ttner - Endpoint dispatch, polling, push refresh, and mowing jobs
+ * @author Nico Brüttner - Endpoint dispatch, polling, push refresh, and mowing jobs
  */
 public class RobonectHandler extends BaseThingHandler {
 
@@ -234,7 +234,7 @@ public class RobonectHandler extends BaseThingHandler {
             updateStatus(ThingStatus.ONLINE);
         } catch (RobonectCommunicationException rce) {
             logger.debug("Failed to communicate with the mower. Taking it offline.", rce);
-            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, rce.getMessage());
+            updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, rce.getMessage());
         } finally {
             sessionActive.remove();
         }
@@ -415,7 +415,7 @@ public class RobonectHandler extends BaseThingHandler {
                 }
             } catch (RobonectCommunicationException e) {
                 logger.debug("Could not refresh {} after a command: {}", endpoint, e.getMessage());
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, e.getMessage());
             } finally {
                 commandRefreshActive.remove();
                 // A newer command may already have replaced this task; leave its map entry intact.
@@ -1080,7 +1080,7 @@ public class RobonectHandler extends BaseThingHandler {
                     session.offlineTimeoutTriggered = true;
                 }
                 logger.debug("Failed to communicate with the mower. Taking it offline.", rce);
-                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.COMMUNICATION_ERROR, rce.getMessage());
+                updateStatus(ThingStatusDetail.COMMUNICATION_ERROR, rce.getMessage());
                 session.loadVersionInfo = true;
             } catch (JsonSyntaxException jse) {
                 // the module sporadically sends invalid json responses. As this is usually recovered with the

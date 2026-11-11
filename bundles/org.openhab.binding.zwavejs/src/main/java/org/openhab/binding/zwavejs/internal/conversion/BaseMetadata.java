@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Matcher;
@@ -77,6 +78,7 @@ public abstract class BaseMetadata {
             Map.entry("min/sec", ""), // special case ZUI sends min/sec as unit, but is actually dimensionless
             Map.entry("°(C/F)", ""), // special case where Zwave JS sends °F/C as unit, but is actually dimensionless
             Map.entry("°F/C", ""), // special case where Zwave JS sends °F/C as unit, but is actually dimensionless
+            Map.entry("°C/F", ""), // special case where Zwave JS sends °C/F as unit, but is actually dimensionless
             Map.entry("oC", "°C"), //
             Map.entry("%rH", "%") // ZUI uses %rH for relative humidity, but openHAB expects the % unit.
     );
@@ -136,7 +138,7 @@ public abstract class BaseMetadata {
         this.factor = determineFactor(value.metadata.unit);
         this.unit = UnitUtils.parseUnit(this.unitSymbol);
         this.itemType = itemTypeFromMetadata(value.metadata.type, value.value, value.commandClass,
-                value.metadata.states);
+                value.metadata.states, value.property, value.propertyKey);
         if (unitSymbol != null && unit == null) {
             logger.warn("Node {}, unable to parse unitSymbol '{}', please file a bug report", nodeId, unitSymbol);
         }
@@ -273,7 +275,8 @@ public abstract class BaseMetadata {
         if (input instanceof Number numberInput) {
             return "-" + numberInput.toString();
         } else if (input instanceof String strInput) {
-            return "-" + strInput.trim().toLowerCase().replaceAll(" ", "-").replaceAll("[^a-zA-Z0-9\\-]", "");
+            return "-"
+                    + strInput.trim().toLowerCase(Locale.ROOT).replaceAll(" ", "-").replaceAll("[^a-zA-Z0-9\\-]", "");
         }
         return "";
     }
@@ -470,7 +473,13 @@ public abstract class BaseMetadata {
      * @return The corrected metadata type.
      */
     protected MetadataType correctedType(MetadataType type, @Nullable Object value, int commandClass,
-            @Nullable Map<String, String> optionList) {
+            @Nullable Map<String, String> optionList, @Nullable Object property, @Nullable Object propertyKey) {
+        // Aggregate color values are typed "any"; when null, the type can't be inferred from the value
+        if (type == MetadataType.ANY && commandClass == COMMAND_CLASS_SWITCH_COLOR && propertyKey == null
+                && ("currentColor".equals(property) || "targetColor".equals(property))) {
+            return MetadataType.COLOR;
+        }
+
         switch (type) {
             case ANY:
                 return determineTypeFromValue(value, commandClass);
@@ -534,8 +543,8 @@ public abstract class BaseMetadata {
     }
 
     protected String itemTypeFromMetadata(MetadataType type, @Nullable Object value, int commandClass,
-            @Nullable Map<String, String> optionList) {
-        type = correctedType(type, value, commandClass, optionList);
+            @Nullable Map<String, String> optionList, @Nullable Object property, @Nullable Object propertyKey) {
+        type = correctedType(type, value, commandClass, optionList, property, propertyKey);
 
         switch (type) {
             case DURATION:

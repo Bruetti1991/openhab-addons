@@ -20,6 +20,8 @@ import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.shelly.internal.api.ShellyApiLightUtil.ShellyLightApiComponent;
 import org.openhab.binding.shelly.internal.api1.Shelly1ApiJsonDTO.ShellyStatusSensor.ShellyMotionSettings;
 import org.openhab.binding.shelly.internal.api2.Shelly2ApiJsonDTO.Shelly2APClientList;
+import org.openhab.binding.shelly.internal.api2.dto.ShellyMediaJsonDTO.Shelly2DeviceStatusMedia;
+import org.openhab.binding.shelly.internal.api2.dto.ShellyThermostatJsonDTO.Shelly2DeviceStatusThermostat;
 import org.openhab.core.thing.CommonTriggerEvents;
 
 import com.google.gson.annotations.SerializedName;
@@ -43,7 +45,6 @@ public class Shelly1ApiJsonDTO {
     public static final String SHELLY_URL_RESTART = "/reboot";
 
     public static final String SHELLY_URL_SETTINGS_RELAY = "/settings/relay";
-    public static final String SHELLY_URL_STATUS_RELEAY = "/status/relay";
     public static final String SHELLY_URL_CONTROL_RELEAY = "/relay";
 
     public static final String SHELLY_URL_SETTINGS_EMETER = "/settings/emeter";
@@ -204,6 +205,7 @@ public class Shelly1ApiJsonDTO {
     public static final String SHELLY_COLOR_BRIGHTNESS = "brightness";
     public static final String SHELLY_COLOR_TEMP = "temp";
     public static final String SHELLY_COLOR_EFFECT = "effect";
+    public static final String SHELLY_COLOR_UNDEFINED = "undefined";
 
     public static final int SHELLY_MIN_ROLLER_POS = 0;
     public static final int SHELLY_MAX_ROLLER_POS = 100;
@@ -842,6 +844,12 @@ public class Shelly1ApiJsonDTO {
         public Boolean calibrated;
         public ArrayList<ShellyThermnostat> thermostats;
 
+        // Shelly Wall Display
+        public @Nullable Boolean relayInThermostat;
+        public @Nullable Boolean sensorInThermostat;
+        public @Nullable Shelly2DeviceStatusMedia media;
+        public @Nullable Shelly2DeviceStatusThermostat thermostat;
+
         public ShellySettingsUpdate update = new ShellySettingsUpdate();
         @SerializedName("ram_total")
         public Long ramTotal;
@@ -1194,6 +1202,7 @@ public class Shelly1ApiJsonDTO {
         public ShellySensorLux lux;
         public ShellySensorAccel accel;
         public ShellySensorBat bat;
+        public ShellySensorBat bat1; // 2nd power source, e.g. devicepower:1
         @SerializedName("sensor")
         public ShellySensorState sensor;
         public Boolean smoke; // SHelly Smoke
@@ -1254,6 +1263,7 @@ public class Shelly1ApiJsonDTO {
         public @Nullable String windDirectionStr;
         public @Nullable Double apparentTemp;
         public @Nullable Double seaLevelPressure;
+        public @Nullable Double capacitorVoltage;
     }
 
     public static class ShellySettingsSmoke {
@@ -1343,6 +1353,8 @@ public class Shelly1ApiJsonDTO {
         public Integer brightness; // brightness, 0..100, applies in mode="white"
         public Integer effect; // Currently applied effect, description: 0: Off, 1: Meteor Shower, 2: Gradual
                                // Change, 3: Breath,
+
+        public String mode;
     }
 
     public static class ShellyStatusLight {

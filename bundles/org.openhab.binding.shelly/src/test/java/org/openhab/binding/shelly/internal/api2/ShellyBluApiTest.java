@@ -20,17 +20,21 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.openhab.binding.shelly.internal.ShellyDevices.THING_TYPE_SHELLYBLUBUTTON1;
+import static org.openhab.binding.shelly.internal.ShellyDevices.THING_TYPE_SHELLYBLUDW;
 import static org.openhab.binding.shelly.internal.ShellyDevices.THING_TYPE_SHELLYBLUWS90;
 
 import java.lang.reflect.Field;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.openhab.binding.shelly.internal.api.ShellyApiException;
 import org.openhab.binding.shelly.internal.api.ShellyDeviceProfile;
 import org.openhab.binding.shelly.internal.api1.Shelly1ApiJsonDTO.ShellyStatusSensor;
@@ -41,12 +45,16 @@ import org.openhab.binding.shelly.internal.config.ShellyThingConfiguration;
 import org.openhab.binding.shelly.internal.handler.ShellyBluHandler;
 import org.openhab.binding.shelly.internal.handler.ShellyThingInterface;
 import org.openhab.binding.shelly.internal.handler.ShellyThingTable;
+import org.openhab.binding.shelly.internal.provider.ShellyChannelDefinitions;
+import org.openhab.binding.shelly.internal.provider.ShellyTranslationProvider;
 import org.openhab.core.i18n.LocationProvider;
 import org.openhab.core.library.types.PointType;
 import org.openhab.core.net.NetworkAddressChangeListener;
 import org.openhab.core.net.NetworkAddressService;
+import org.openhab.core.thing.Channel;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingTypeUID;
+import org.openhab.core.thing.ThingUID;
 
 /**
  * Unit tests for {@link ShellyBluApi} — connection state guards.
@@ -59,6 +67,13 @@ public class ShellyBluApiTest {
 
     private @Nullable ShellyThingInterface thingMock;
 
+    @BeforeAll
+    static void initChannelDefinitions() {
+        ShellyTranslationProvider messages = mock(ShellyTranslationProvider.class);
+        when(messages.get(anyString(), any(Object[].class))).thenAnswer(i -> i.getArgument(0));
+        new ShellyChannelDefinitions(messages);
+    }
+
     @Test
     void getStatusThrowsWhenNotConnected() throws Exception {
         ShellyBluApi api = buildBluApi();
@@ -70,6 +85,24 @@ public class ShellyBluApiTest {
     void getStatusSucceedsWhenConnected() throws Exception {
         ShellyBluApi api = buildBluApi();
         setField(api, "connected", true);
+        assertDoesNotThrow(api::getStatus);
+    }
+
+    @Test
+    void closeDisconnectsSoNextEventBringsThingOnline() throws Exception {
+        ShellyBluApi api = buildBluApi();
+        ShellyThingInterface thing = Objects.requireNonNull(thingMock);
+        setField(api, "connected", true);
+
+        api.close();
+        assertThrows(ShellyApiException.class, api::getStatus);
+
+        api.onNotifyEvent("""
+                {"src": "shellyblugw-test", "params": {"events": [{"event": "oh-blu.data",
+                 "data": {"addr": "aa:bb:cc:dd:ee:ff", "pid": 1, "Battery": 85}}]}}
+                """);
+
+        verify(thing).setThingOnline();
         assertDoesNotThrow(api::getStatus);
     }
 
@@ -101,7 +134,7 @@ public class ShellyBluApiTest {
                 {"src": "shellyblugw-test", "params": {"events": [{"event": "oh-blu.data",
                  "data": {"addr": "aa:bb:cc:dd:ee:ff", "pid": 2,
                           "Moisture": 0.0, "Speed": [4.2, 8.1], "Direction": 135.0, "UVIndex": 3.7,
-                          "Precipitation": 0.5}}]}}
+                          "Precipitation": 0.5, "Voltage": 3.284}}]}}
                 """;
 
         api.onNotifyEvent(atmosphericPacket);
@@ -117,6 +150,7 @@ public class ShellyBluApiTest {
         assertThat("windDirection from second packet added", sensorData.windDirection, is(equalTo(135.0)));
         assertThat("uvIndex from second packet added", sensorData.uvIndex, is(equalTo(3.7)));
         assertThat("precipitation from second packet added", sensorData.precipitation, is(equalTo(0.5)));
+        assertThat("capacitorVoltage from second packet added", sensorData.capacitorVoltage, is(equalTo(3.284)));
         assertThat("rain from second packet added", sensorData.rain, is(equalTo(false)));
         assertThat("windDirectionStr derived from windDirection", sensorData.windDirectionStr, is(equalTo("SE")));
         assertThat("apparentTemp derived once temp/humidity/wind are all present", sensorData.apparentTemp,
@@ -294,6 +328,20 @@ public class ShellyBluApiTest {
     }
 
     @Test
+    void onNotifyEventPostsRawPayloadAlarmOnceWhenForwardedByTwoGateways() throws Exception {
+        ShellyBluApi api = buildBluApi();
+        String packet = """
+                {"src": "%s", "params": {"events": [{"event": "oh-blu.data",
+                 "data": {"addr": "aa:bb:cc:dd:ee:ff", "pid": 7, "ver": 2, "raw": "0155fe"}}]}}
+                """;
+
+        api.onNotifyEvent(packet.formatted("shellyblugw-a"));
+        api.onNotifyEvent(packet.formatted("shellyblugw-b"));
+
+        verify(thingMock, times(1)).postEvent("BTH_UNKNOWN_TYPE", false);
+    }
+
+    @Test
     void onNotifyEventOverwritesRepeatedScalarObjectInsteadOfThrowing() throws Exception {
         ShellyBluApi api = buildBluApi();
         String repeatedBatteryPacket = """
@@ -321,6 +369,42 @@ public class ShellyBluApiTest {
         assertThat(getField(api, "warnedDataVersion"), is(nullValue()));
     }
 
+    @Test
+    void onNotifyEventAddsSensorChannelsWhenTheirValuesFirstAppear() throws Exception {
+        ShellyBluApi api = buildBluApi(THING_TYPE_SHELLYBLUDW);
+        ShellyThingInterface thing = Objects.requireNonNull(thingMock);
+
+        String batteryOnlyPacket = """
+                {"src": "shellyblugw-test", "params": {"events": [{"event": "oh-blu.data",
+                 "data": {"addr": "aa:bb:cc:dd:ee:ff", "pid": 153, "ver": 2, "raw": "00990129f00200f100170001"}}]}}
+                """;
+        String fullPacket = """
+                {"src": "shellyblugw-test", "params": {"events": [{"event": "oh-blu.data",
+                 "data": {"addr": "aa:bb:cc:dd:ee:ff", "pid": 157, "ver": 2, "raw": "009d012905480d002d013f1a00"}}]}}
+                """;
+
+        api.onNotifyEvent(batteryOnlyPacket);
+        assertThat("battery channels added by the battery-only packet",
+                channelAdditionsContaining(thing, "battery#batteryLevel"), is(1L));
+        assertThat("no window state channel before a packet carries it",
+                channelAdditionsContaining(thing, "sensors#state"), is(0L));
+
+        api.onNotifyEvent(fullPacket);
+        assertThat("window state channel added once the value shows up",
+                channelAdditionsContaining(thing, "sensors#state"), is(1L));
+        assertThat("lux channel added once the value shows up", channelAdditionsContaining(thing, "sensors#lux"),
+                is(1L));
+        assertThat("tilt channel added once the value shows up", channelAdditionsContaining(thing, "sensors#tilt"),
+                is(1L));
+    }
+
+    private static long channelAdditionsContaining(ShellyThingInterface thing, String channelId) {
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Channel>> captor = ArgumentCaptor.forClass(Map.class);
+        verify(thing, atLeast(0)).updateThingChannels(any(), captor.capture());
+        return captor.getAllValues().stream().filter(channels -> channels.containsKey(channelId)).count();
+    }
+
     private ShellyBluApi buildBluApi() {
         return buildBluApi(THING_TYPE_SHELLYBLUBUTTON1);
     }
@@ -334,6 +418,7 @@ public class ShellyBluApiTest {
     private ShellyBluApi buildBluApi(ThingTypeUID thingTypeUID, LocationProvider locationProvider) {
         Thing ohThing = mock(Thing.class);
         when(ohThing.getThingTypeUID()).thenReturn(thingTypeUID);
+        when(ohThing.getUID()).thenReturn(new ThingUID(thingTypeUID, "test"));
 
         ShellyDeviceProfile deviceProfile = new ShellyDeviceProfile(thingTypeUID);
 
